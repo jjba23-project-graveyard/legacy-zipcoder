@@ -1,0 +1,44 @@
+name: On Pull Request 
+on:
+  pull_request:
+    branches:
+      - master
+      - "releases/*"
+  push:
+    branches:
+      - master
+      - "releases/*"
+
+jobs:
+  on-pr:
+    runs-on: ubuntu-latest
+    env:
+      GHC_VERSION: "8.10.7"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: "Set up HLint"
+        uses: haskell/actions/hlint-setup@v2
+        with:
+          version: "3.1.6"
+
+      - name: "Run HLint"
+        uses: haskell/actions/hlint-run@v2
+        with:
+          path: src/
+          fail-on: warning
+
+      - uses: haskell/actions/setup@v2
+        with:
+          ghc-version: "${{ env.GHC_VERSION }}"
+          enable-stack: true 
+          stack-version: 'latest'
+
+      - name: "Run tests and build"
+        run: |
+          cd $GITHUB_WORKSPACE 
+          ./testsuite/runtests.sh
+          stack build
+          mv "$(stack path --local-install-root)/bin/zipcoder" zipcoder-${{ matrix.os }}
+

@@ -1,0 +1,71 @@
+---
+name: "tagged-release"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  create-release:
+    name: "Create Release"
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+
+  pre-release:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        include:
+          - os: ubuntu-latest
+            RELEASE_TARGET_NAME: "Linux"
+            BUILD_OUTPUT_FOLDER: "x86_64-linux"
+          - os: macos-latest
+            RELEASE_TARGET_NAME: "macOS"
+            BUILD_OUTPUT_FOLDER: "x86_64-osx"
+
+    env:
+      GHC_VERSION: "8.10.7"
+      
+    name: "Release for ${{ matrix.RELEASE_TARGET_NAME }}"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: haskell/actions/setup@v2
+        with:
+          ghc-version: "${{ env.GHC_VERSION }}"
+          enable-stack: true 
+          stack-version: 'latest'
+
+      
+      - name: "Run tests and build"
+        run: |
+          cd $GITHUB_WORKSPACE 
+          ./testsuite/runtests.sh
+          stack build
+          mv "$(stack path --local-install-root)/bin/zipcoder" zipcoder-${{ matrix.os }}
+      
+      - name: "Package"
+        run: |
+          mkdir zipcoder
+          cp LICENSE zipcoder/
+          cp README.md zipcoder/
+          cp zipcoder-${{ matrix.os }} zipcoder/
+          tar cvf zipcoder-${{ matrix.os }}.tar.gz ./zipcoder
+
+      - name: "Upload binaries to release"
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "${{ github.ref_name }}"
+          files: zipcoder-${{ matrix.os }}.tar.gz
